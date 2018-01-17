@@ -52,6 +52,5 @@ int main() {
     assert(test_ev("+4+d", "?"));
     assert(test_ev("8823yhjdjkjw822", "?"));
 
-
 }
 

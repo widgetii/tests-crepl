@@ -107,7 +107,9 @@ static var_t ev_getnum() {
     }
     *sptr = 0;
 
-    if (float_flag) {
+    // Just for fun - don't break big ints and convert them to double
+    // need more smarty algoritm to do
+    if (float_flag || strlen(buf) > 9) {
         value.type = DOUBLE;
         value.value.d = strtod(buf, NULL);
     } else {
@@ -124,7 +126,6 @@ static void ev_match(char x) {
         ev_getchar();
         ev_skipwhite();
     } else {
-        fprintf(stderr, "c = %c\n", x);
         ev_expected("No match operation");
     }
 }
@@ -269,10 +270,11 @@ static var_t ev_divide(var_t lhs) {
 
 // parse and evaluate a math expression
 // <term> ::= <factor> [ * factor] [ / factor]
-static var_t ev_term() {
-    var_t result;
+static var_t ev_term(var_t start_value) {
+    var_t result = start_value;
 
-    result = ev_factor();
+    if (result.type == NONE)
+        result = ev_factor();
     while (look == '*' || look == '/') {
         switch (look) {
             case '*':
@@ -296,21 +298,11 @@ static int var_offset(char var) {
 
 // save some value to global variable
 static void ev_assign_val_to_variable(char var, var_t value) {
-//    fprintf(stderr, "%c = %d\n", var, value.value.i); 
     g_variables[var_offset(var)] = value; 
 }
 
 // extract value from global variable
 static var_t ev_extract_val_from_variable(char var) {
-/*    g_variables[0].type = INT;
-    g_variables[0].value.i = 100;
-
-    g_variables[1].type = INT;
-    g_variables[1].value.i = 200;
-*/
-
-
-//    fprintf(stderr, "got from %c\n", var);
     return g_variables[var_offset(var)]; 
 }
 
@@ -344,28 +336,31 @@ static var_t ev_evaluate_one() {
 // expression -> [+][-] term [- term] [+ term]
 static var_t ev_expression(var_t start_value) {
     var_t result = start_value;
+    var_t empty = { .type = NONE };
 
     if (result.type == NONE) {
         if (ev_isaddop(look)) {
             result.type = INT;
             result.value.i = 0;
         } else {
-            result = ev_term();
+            result = ev_term(result);
         }
-    }
+    } else result = ev_term(start_value);
 
     while (ev_isaddop(look)) {
         switch (look) {
             case '+':
                 ev_match('+');
-                result = ev_operation_add(result, ev_term());
+                result = ev_operation_add(result, ev_term(empty));
                 break;
             case '-':
                 ev_match('-');
-                result = ev_operation_sub(result, ev_term());
+                result = ev_operation_sub(result, ev_term(empty));
                 break;
         }
     }
+    // omit whitespaces at the end of expression
+    ev_skipwhite();
 
     return result;
 }
@@ -406,6 +401,11 @@ int evaluate_expression(const char* expr, char* output, size_t bufsize) {
     if (res) 
         return res;
     var_t_to_string(ev_evaluate_one(), output, bufsize);
+    if (*evptr != 0) {
+        errmsg = "Syntax error";
+        errptr--;
+        return 1;
+    }
     return 0;
 }
 
