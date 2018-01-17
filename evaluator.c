@@ -26,7 +26,7 @@ typedef struct {
 static var_t ev_expression(var_t start_value);
 static var_t ev_extract_val_from_variable(char var);
 
-// assuming that we can have 26 variables of int or double type (or NONE while starting) from a to z
+// assuming that we can have 26 variables of int or double type (or NONE while starting) from A to Z
 static var_t g_variables[26];
 
 // lookahead character
@@ -127,6 +127,8 @@ static void ev_match(char x) {
         ev_skipwhite();
     } else {
         ev_expected("No match operation");
+        fprintf(stderr, "\'%c\'", x);
+        exit(1);
     }
 }
 
@@ -275,6 +277,7 @@ static var_t ev_term(var_t start_value) {
 
     if (result.type == NONE)
         result = ev_factor();
+    ev_skipwhite();
     while (look == '*' || look == '/') {
         switch (look) {
             case '*':
@@ -327,6 +330,10 @@ static var_t ev_evaluate_one() {
             // get value of current_value and 
             // evaluate further
             result = ev_extract_val_from_variable(current_variable);
+            if (result.type == NONE) {
+                evptr--;
+                ev_expected("Variable is not initialized");
+            }
             
             return ev_expression(result);
         }

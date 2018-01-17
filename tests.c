@@ -51,6 +51,10 @@ int main() {
     assert(test_ev("g", "?"));
     assert(test_ev("+4+d", "?"));
     assert(test_ev("8823yhjdjkjw822", "?"));
+    assert(test_ev("(1 + 2)", "3"));
+    assert(test_ev("a / (a + b)", "0.571429"));
+    assert(test_ev("n + 0", "?"));
 
+    puts("All tests are ok!\n");
 }
 
