@@ -23,7 +23,7 @@ typedef struct {
     enum { NONE, INT, DOUBLE } type;
 } var_t;
 
-static var_t ev_expression();
+static var_t ev_expression(var_t start_value);
 static var_t ev_extract_val_from_variable(char var);
 
 // assuming that we can have 26 variables of int or double type (or NONE while starting) from a to z
@@ -124,92 +124,194 @@ static void ev_match(char x) {
         ev_getchar();
         ev_skipwhite();
     } else {
+        fprintf(stderr, "c = %c\n", x);
         ev_expected("No match operation");
     }
 }
 
 // get a sum of two values (probably of different types)
 static var_t ev_operation_add(var_t lhs, var_t rhs) {
-    var_t value;
+    if (lhs.type == NONE || rhs.type == NONE) {
+        ev_expected("Cannot evaluate expression");
+    }
+
+    var_t result;
     if (lhs.type == DOUBLE || rhs.type == DOUBLE) {
-        value.type = DOUBLE;
+        result.type = DOUBLE;
         if (lhs.type == DOUBLE && rhs.type == DOUBLE) {
-            value.value.d = lhs.value.d + rhs.value.d;
+            result.value.d = lhs.value.d + rhs.value.d;
         } else if (lhs.type == DOUBLE) {
-            value.value.d = lhs.value.d + rhs.value.i;
+            result.value.d = lhs.value.d + rhs.value.i;
         } else // rhs.type == DOUBLE {
-            value.value.d = lhs.value.i + rhs.value.d;
+            result.value.d = lhs.value.i + rhs.value.d;
     } else {
         // both INT
-        value.type = INT;
-        value.value.i = lhs.value.i + rhs.value.i;
+        result.type = INT;
+        result.value.i = lhs.value.i + rhs.value.i;
     } 
 
-    return value;
+    return result;
 }
 
 static var_t ev_operation_sub(var_t lhs, var_t rhs) {
-    var_t value;
+    if (lhs.type == NONE || rhs.type == NONE) {
+        ev_expected("Cannot evaluate expression");
+    }
+
+    var_t result;
     if (lhs.type == DOUBLE || rhs.type == DOUBLE) {
-        value.type = DOUBLE;
+        result.type = DOUBLE;
         if (lhs.type == DOUBLE && rhs.type == DOUBLE) {
-            value.value.d = lhs.value.d - rhs.value.d;
+            result.value.d = lhs.value.d - rhs.value.d;
         } else if (lhs.type == DOUBLE) {
-            value.value.d = lhs.value.d - rhs.value.i;
+            result.value.d = lhs.value.d - rhs.value.i;
         } else // rhs.type == DOUBLE {
-            value.value.d = lhs.value.i - rhs.value.d;
+            result.value.d = lhs.value.i - rhs.value.d;
     } else {
         // both INT
-        value.type = INT;
-        value.value.i = lhs.value.i - rhs.value.i;
+        result.type = INT;
+        result.value.i = lhs.value.i - rhs.value.i;
     } 
 
-    return value;
+    return result;
 }
+
+static var_t ev_operation_mul(var_t lhs, var_t rhs) {
+    if (lhs.type == NONE || rhs.type == NONE) {
+        ev_expected("Cannot evaluate expression");
+    }
+
+    var_t result;
+    if (lhs.type == DOUBLE || rhs.type == DOUBLE) {
+        result.type = DOUBLE;
+        if (lhs.type == DOUBLE && rhs.type == DOUBLE) {
+            result.value.d = lhs.value.d * rhs.value.d;
+        } else if (lhs.type == DOUBLE) {
+            result.value.d = lhs.value.d * rhs.value.i;
+        } else // rhs.type == DOUBLE {
+            result.value.d = lhs.value.i * rhs.value.d;
+    } else {
+        // both INT
+        result.type = INT;
+        result.value.i = lhs.value.i * rhs.value.i;
+    } 
+
+    return result;
+}
+
+static var_t ev_operation_div(var_t lhs, var_t rhs) {
+    if (lhs.type == NONE || rhs.type == NONE) {
+        ev_expected("Cannot evaluate expression");
+    }
+
+    if ((rhs.type == DOUBLE && rhs.value.d == 0) || (rhs.type == INT && rhs.value.i == 0)) {
+        ev_expected("Division per zero detected");
+    }
+
+    var_t result;
+    if (lhs.type == DOUBLE || rhs.type == DOUBLE) {
+        result.type = DOUBLE;
+        if (lhs.type == DOUBLE && rhs.type == DOUBLE) {
+            result.value.d = lhs.value.d / rhs.value.d;
+        } else if (lhs.type == DOUBLE) {
+            result.value.d = lhs.value.d / rhs.value.i;
+        } else // rhs.type == DOUBLE {
+            result.value.d = lhs.value.i / rhs.value.d;
+    } else {
+        // both INT
+        // BUT! it's really strange but we need to get in value
+        // even on two int's division, so checking if we have remainder
+        // and if does, doing DOUBLE result
+        if (lhs.value.i % rhs.value.i) {
+            result.type = DOUBLE;
+            result.value.d = (double)lhs.value.i / rhs.value.i;
+        } else {
+            result.type = INT;
+            result.value.i = lhs.value.i / rhs.value.i;
+        }
+    } 
+
+    return result;
+}
+
 
 // parse and evaluate a math factor
 // <factor> ::= <number> | (<expression>) | <variable>
 static var_t ev_factor() {
-    var_t value;
+    var_t result;
+    result.type = NONE;
 
     if (look == '(') {
         ev_match('(');
-        value = ev_expression();
+        result = ev_expression(result);
         ev_match(')');
     } else if (isalpha(look)) {
         // if <variable> (or function in future versions
-        value = ev_extract_val_from_variable(look);
+        result = ev_extract_val_from_variable(look);
+        ev_getchar();
     } else // <number>
-    value = ev_getnum();
+    result = ev_getnum();
 
-    return value;
+    return result;
+}
+
+static var_t ev_multiply(var_t lhs) {
+    ev_match('*');
+
+    return ev_operation_mul(lhs, ev_factor());
+}
+
+static var_t ev_divide(var_t lhs) {
+    ev_match('/');
+
+    return ev_operation_div(lhs, ev_factor());
 }
 
 // parse and evaluate a math expression
-static void ev_term() {
-    ev_factor();
+// <term> ::= <factor> [ * factor] [ / factor]
+static var_t ev_term() {
+    var_t result;
 
+    result = ev_factor();
+    while (look == '*' || look == '/') {
+        switch (look) {
+            case '*':
+                result = ev_multiply(result);
+                break;
+            case '/':
+                result = ev_divide(result);
+                break;
+        }
+    }
+
+    return result;
 }
 
-// <factor> ::= <number> | (<expression>) | <variable>
-// <term> ::= <factor> [ * factor] [ / factor]
+// helper function to get actual var index in global vars array
+static int var_offset(char var) {
+    char v = toupper(var); 
+    assert(v >= 'A' && v <= 'Z' && "variable range not supported");
+    return v - 'A';
+} 
 
 // save some value to global variable
 static void ev_assign_val_to_variable(char var, var_t value) {
-    char v = toupper(var); 
-    assert(var >= 'A' && var <= 'Z' && "variable range not supported");
-
-    int offset = v - 'A';
-    g_variables[offset] = value; 
+//    fprintf(stderr, "%c = %d\n", var, value.value.i); 
+    g_variables[var_offset(var)] = value; 
 }
 
 // extract value from global variable
 static var_t ev_extract_val_from_variable(char var) {
-    char v = toupper(var);
-    assert(var >= 'A' && var <= 'Z' && "variable range not supported");
+/*    g_variables[0].type = INT;
+    g_variables[0].value.i = 100;
 
-    int offset = v - 'A';
-    return g_variables[offset]; 
+    g_variables[1].type = INT;
+    g_variables[1].value.i = 200;
+*/
+
+
+//    fprintf(stderr, "got from %c\n", var);
+    return g_variables[var_offset(var)]; 
 }
 
 /// process one expression
@@ -217,6 +319,7 @@ static var_t ev_extract_val_from_variable(char var) {
 static var_t ev_evaluate_one() {
     char current_variable = 0;
     var_t result;
+    result.type = NONE;
 
     if (isalpha(look)) {
         current_variable = look;
@@ -225,61 +328,46 @@ static var_t ev_evaluate_one() {
         if (look == ASSIGNMENT) {
             // l-value
             ev_match(look);
-            ev_skipwhite();
-            result = ev_expression();
+            result = ev_expression(result);
             ev_assign_val_to_variable(current_variable, result);
             return result;
         } else {
             // get value of current_value and 
-            // evaluate futher
+            // evaluate further
             result = ev_extract_val_from_variable(current_variable);
-
-
-            // TODO: next calculations
-            //
-            return result;
+            
+            return ev_expression(result);
         }
-    } else return ev_expression();
+    } else return ev_expression(result);
 }
 
-// expression -> [variable]
-static var_t ev_expression() {
-    var_t value;
-    value.type = NONE;
+// expression -> [+][-] term [- term] [+ term]
+static var_t ev_expression(var_t start_value) {
+    var_t result = start_value;
 
-/*    if (isalpha(look)) {
-       variable = look;
-       ev_skipwhite();
-       if (look != ASSIGNMENT) {
-       }
-       ev_skipwhite();
-    }*/
-
-    if (ev_isaddop(look)) {
-        value.type = INT;
-        value.value.i = 0;
-    } else {
-        value = ev_getnum();
+    if (result.type == NONE) {
+        if (ev_isaddop(look)) {
+            result.type = INT;
+            result.value.i = 0;
+        } else {
+            result = ev_term();
+        }
     }
 
     while (ev_isaddop(look)) {
         switch (look) {
             case '+':
                 ev_match('+');
-                value = ev_operation_add(value, ev_getnum());
+                result = ev_operation_add(result, ev_term());
                 break;
             case '-':
                 ev_match('-');
-                value = ev_operation_sub(value, ev_getnum());
+                result = ev_operation_sub(result, ev_term());
                 break;
         }
     }
 
-//    if (variable && value.type != NONE) {
-        // assign new value
-//    }
-
-    return value;
+    return result;
 }
 
 // get last error and string number
@@ -317,7 +405,7 @@ int evaluate_expression(const char* expr, char* output, size_t bufsize) {
     int res = setjmp(jmpenv);
     if (res) 
         return res;
-    var_t_to_string(ev_expression(), output, bufsize);
+    var_t_to_string(ev_evaluate_one(), output, bufsize);
     return 0;
 }
 
